@@ -1,13 +1,9 @@
-name: Rhys Williams Monitor
+name: Monitor Rhys Williams Posts
 
 on:
   schedule:
-    # Run every 5 minutes
-    - cron: "*/5 * * * *"
-  workflow_dispatch: # Allow manual trigger
-  push:
-    branches: [main]
-    paths: [".github/workflows/rhys-monitor.yml"] # Only run on workflow changes
+    - cron: "*/30 * * * *" # Every 30 minutes
+  workflow_dispatch: # Manual trigger
 
 jobs:
   monitor:
@@ -18,19 +14,19 @@ jobs:
         run: |
           echo "🔍 Checking for new Rhys Williams posts..."
 
-          response=$(curl -s -w "\n%{http_code}" "${{ secrets.VERCEL_API_URL }}/api/check-rhys")
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n -1)
+          # Make the API call and capture both response and status code
+          http_code=$(curl -s -w "%{http_code}" -o response.json "${{ secrets.VERCEL_URL }}/api/check-rhys")
 
           echo "HTTP Status: $http_code"
-          echo "Response: $body"
+          echo "Response:"
+          cat response.json
 
           if [ "$http_code" -eq 200 ]; then
             echo "✅ Successfully checked for posts"
             
             # Parse response to check if new posts were found
-            new_posts=$(echo "$body" | jq -r '.newPosts // 0')
-            message=$(echo "$body" | jq -r '.message // "No message"')
+            new_posts=$(cat response.json | jq -r '.newPosts // 0')
+            message=$(cat response.json | jq -r '.message // "No message"')
             
             echo "New posts found: $new_posts"
             echo "Message: $message"
@@ -42,7 +38,7 @@ jobs:
             fi
           else
             echo "❌ Error: HTTP $http_code"
-            echo "$body"
+            cat response.json
             exit 1
           fi
 
@@ -50,4 +46,3 @@ jobs:
         if: failure()
         run: |
           echo "❌ Monitor check failed!"
-          # You could add additional failure notifications here
