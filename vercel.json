@@ -1,8 +1,13 @@
 {
-    "version": 2,
     "functions": {
         "api/check-rhys.ts": {
             "maxDuration": 30
         }
-    }
+    },
+    "rewrites": [
+        {
+            "source": "/(.*)",
+            "destination": "/api/check-rhys"
+        }
+    ]
 }
