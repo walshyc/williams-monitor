@@ -48,6 +48,7 @@ async function addSeenPosts(newPostLinks: string[]): Promise<void> {
 async function scrapeNewPosts(): Promise<Post[]> {
     try {
         console.log('🔍 Fetching Rhys Williams author page...');
+        console.log(123);
 
         const response = await fetch(AUTHOR_URL, {
             headers: {
