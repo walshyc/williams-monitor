@@ -1,11 +1,5 @@
 {
     "version": 2,
-    "builds": [
-        {
-            "src": "api/*.ts",
-            "use": "@vercel/node"
-        }
-    ],
     "functions": {
         "api/check-rhys.ts": {
             "maxDuration": 30
