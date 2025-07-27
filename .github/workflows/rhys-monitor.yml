@@ -13,34 +13,8 @@ jobs:
       - name: Check Rhys Williams Posts
         run: |
           echo "🔍 Checking for new Rhys Williams posts..."
-
-          # Make the API call and capture both response and status code
-          http_code=$(curl -s -w "%{http_code}" -o response.json "${{ secrets.VERCEL_URL }}/api/check-rhys")
-
-          echo "HTTP Status: $http_code"
-          echo "Response:"
-          cat response.json
-
-          if [ "$http_code" -eq 200 ]; then
-            echo "✅ Successfully checked for posts"
-            
-            # Parse response to check if new posts were found
-            new_posts=$(cat response.json | jq -r '.newPosts // 0')
-            message=$(cat response.json | jq -r '.message // "No message"')
-            
-            echo "New posts found: $new_posts"
-            echo "Message: $message"
-            
-            if [ "$new_posts" -gt 0 ]; then
-              echo "🎉 $new_posts new posts found and alerts sent!"
-            else
-              echo "📭 No new posts found"
-            fi
-          else
-            echo "❌ Error: HTTP $http_code"
-            cat response.json
-            exit 1
-          fi
+          curl -f "${{ secrets.VERCEL_URL }}/api/check-rhys"
+          echo "✅ Monitor check completed"
 
       - name: Notify on Failure
         if: failure()
