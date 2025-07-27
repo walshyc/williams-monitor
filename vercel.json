@@ -4,6 +4,8 @@
             "maxDuration": 30
         }
     },
+    "buildCommand": "npm run type-check",
+    "framework": null,
     "rewrites": [
         {
             "source": "/(.*)",

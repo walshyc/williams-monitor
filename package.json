@@ -6,7 +6,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "vercel dev",
-    "build": "tsc --noEmit",
+    "build": "npm run type-check",
     "type-check": "tsc --noEmit",
     "test": "node --loader ts-node/esm test-local.ts"
   },
