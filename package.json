@@ -1,0 +1,30 @@
+{
+  "name": "rhys-williams-monitor",
+  "version": "1.0.0",
+  "description": "TypeScript monitor for Rhys Williams betting tips",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "tsc --noEmit",
+    "type-check": "tsc --noEmit",
+    "test": "node --loader ts-node/esm test-local.ts"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "jsdom": "^22.1.0",
+    "nodemailer": "^6.9.4",
+    "@vercel/kv": "^0.2.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2",
+    "@types/node": "^20.8.0",
+    "@types/jsdom": "^22.1.0",
+    "@types/nodemailer": "^6.4.11",
+    "@vercel/node": "^3.0.7",
+    "ts-node": "^10.9.1"
+  },
+  "keywords": ["betting", "tips", "monitor", "vercel", "typescript"],
+  "author": "Your Name",
+  "license": "MIT"
+}

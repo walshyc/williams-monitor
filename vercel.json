@@ -1,0 +1,7 @@
+{
+    "functions": {
+        "api/check-rhys.ts": {
+            "maxDuration": 30
+        }
+    }
+}
