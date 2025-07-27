@@ -48,30 +48,52 @@ async function addSeenPosts(newPostLinks: string[]): Promise<void> {
 async function scrapeNewPosts(): Promise<Post[]> {
     try {
         console.log('🔍 Fetching Rhys Williams author page...');
-        console.log(123);
+        console.log(456);
+
+        // Add random delay to appear more human
+        const randomDelay = Math.floor(Math.random() * 3000) + 2000; // 2-5 seconds
+        console.log(`⏱️ Waiting ${randomDelay}ms before request...`);
+        await new Promise(resolve => setTimeout(resolve, randomDelay));
+
+        // More comprehensive headers to mimic a real browser
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
+            'Referer': 'https://www.google.com/',
+            'Origin': 'https://betting.betfair.com'
+        };
+
+        console.log('🌐 Making request with enhanced headers...');
 
         const response = await fetch(AUTHOR_URL, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'Cache-Control': 'max-age=0'
-            }
+            headers,
+            method: 'GET'
         });
 
+        console.log(`📡 Response status: ${response.status}`);
+        console.log(`📡 Response headers:`, Object.fromEntries(response.headers.entries()));
+
         if (!response.ok) {
+            // Log more details about the error
+            const responseText = await response.text();
+            console.log(`❌ Response body: ${responseText.substring(0, 500)}...`);
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const html = await response.text();
+        console.log(`📄 HTML length: ${html.length} characters`);
+        console.log(`📄 HTML preview: ${html.substring(0, 200)}...`);
+
         const dom = new JSDOM(html);
         const document = dom.window.document;
 
