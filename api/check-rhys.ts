@@ -60,11 +60,23 @@ async function extractTipsFromUrl(url: string): Promise<BettingTip[]> {
     try {
         console.log(`🤖 Extracting tips from: ${url}`);
 
-        // Fetch the blog post content
+        // Add delay to avoid being flagged as a bot
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Use more realistic browser headers
         const response = await fetch(url, {
             headers: {
-                "User-Agent": USER_AGENT,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Cache-Control": "max-age=0",
             },
         });
 
@@ -73,23 +85,24 @@ async function extractTipsFromUrl(url: string): Promise<BettingTip[]> {
         }
 
         const html = await response.text();
+
+        // Check if we got a Cloudflare challenge page
+        if (html.includes("Just a moment") || html.includes("cf-browser-verification")) {
+            console.log("❌ Blocked by Cloudflare/bot protection");
+            return [];
+        }
+
         const dom = new JSDOM(html);
         const document = dom.window.document;
 
-        // Extract the recommended bets section
+        // Rest of your extraction logic...
         const recommendedBetsDiv = document.getElementById("recommended_bets");
 
         if (!recommendedBetsDiv) {
             console.log("❌ No recommended_bets div found");
-            console.log("🔍 Available divs with IDs:",
-                Array.from(document.querySelectorAll('div[id]'))
-                    .map(div => div.id)
-                    .slice(0, 10) // Show first 10 IDs for debugging
-            );
             return [];
         }
 
-        // Get the HTML content instead of just text content
         const betsHTML = recommendedBetsDiv.innerHTML;
         console.log(`📝 Extracted betting HTML: ${betsHTML.substring(0, 500)}...`);
 
@@ -98,7 +111,6 @@ async function extractTipsFromUrl(url: string): Promise<BettingTip[]> {
             return [];
         }
 
-        // Use AI to extract structured betting tips from HTML
         const result = await generateObject({
             model: openai("gpt-4o-mini"),
             schema: BettingTipsSchema,
@@ -121,19 +133,13 @@ async function extractTipsFromUrl(url: string): Promise<BettingTip[]> {
         });
 
         console.log(`✅ Extracted ${result.object.tips.length} tips using AI`);
-
-        // Log extracted tips for debugging
-        result.object.tips.forEach((tip, i) => {
-            console.log(`Tip ${i + 1}: ${tip.horseName} at ${tip.meetingLocation} (${tip.time}) - ${tip.points} ${tip.betType} @ ${tip.suggestedPrice}`);
-        });
-
         return result.object.tips;
+
     } catch (error) {
         console.error("❌ Error extracting tips:", error);
         return [];
     }
 }
-
 async function debugPageStructure(url: string): Promise<void> {
     try {
         const response = await fetch(url, {
