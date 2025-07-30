@@ -137,7 +137,7 @@ function formatEmailBody(posts: Post[]): string {
     });
 
     body += `Happy betting! 🐎\n`;
-    body += `Alert sent at: ${new Date().toLocaleString()}`;
+    body += `Alert sent at: ${new Date().toLocaleString('en-IE', { timeZone: 'Europe/Dublin' })}`;
 
     return body;
 }
@@ -161,7 +161,7 @@ function formatEmailHTML(posts: Post[]): string {
     html += `
     </ul>
     <p>Happy betting! 🐎</p>
-    <p><small>Alert sent at: ${new Date().toLocaleString()}</small></p>
+    <p><small>Alert sent at: ${new Date().toLocaleString('en-IE', { timeZone: 'Europe/Dublin' })}</small></p>
     `;
 
     return html;
@@ -176,7 +176,7 @@ function formatSlackMessage(posts: Post[]): string {
         message += `   🔗 <${post.link}|Read More>\n\n`;
     });
 
-    message += `🤖 _Alert sent at ${new Date().toLocaleString()}_`;
+    message += `🤖 _Alert sent at ${new Date().toLocaleString('en-IE', { timeZone: 'Europe/Dublin' })}_`;
 
     return message;
 }
@@ -184,10 +184,10 @@ function formatSlackMessage(posts: Post[]): string {
 function parseRSSDate(dateString: string): string {
     try {
         const date = new Date(dateString);
-        return date.toISOString();
+        return date.toLocaleString('en-IE', { timeZone: 'Europe/Dublin' });
     } catch (error) {
         console.error('Error parsing date:', dateString, error);
-        return new Date().toISOString();
+        return new Date().toLocaleString('en-IE', { timeZone: 'Europe/Dublin' });
     }
 }
 
@@ -282,7 +282,7 @@ export default async function handler(
         return;
     }
 
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date().toLocaleString('en-IE', { timeZone: 'Europe/Dublin' });
 
     try {
         console.log('🔍 Starting Rhys Williams RSS monitor check at:', timestamp);
