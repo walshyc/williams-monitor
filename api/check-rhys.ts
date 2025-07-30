@@ -171,7 +171,7 @@ function formatSlackMessage(posts: Post[]): string {
 
     posts.forEach((post, i) => {
         message += `${i + 1}. *${post.title}*\n`;
-        message += `   📅 ${new Date(post.date).toLocaleString("en-IE", { timeZone: "Europe/Dublin" })}\n`;
+        message += `   📅 ${post.date}\n`;
         message += `   🔗 <${post.link}|Read More>\n\n`;
     });
 
