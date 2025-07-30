@@ -2,9 +2,10 @@ name: Monitor Rhys Williams Posts
 
 on:
   schedule:
-    # Run every 15 minutes between 10:00 and 14:00 UTC (adjust timezone as needed)
-    - cron: "0,15,30,45 10-13 * * *" # Every 15 mins from 10:00-13:45 UTC
-    - cron: "0 14 * * *" # Final check at 14:00 UTC
+    # Run every 5 minutes between 9:30 and 12:30 UTC
+    - cron: "30,35,40,45,50,55 9 * * *" # 9:30-9:55 (6 runs)
+    - cron: "0,5,10,15,20,25,30,35,40,45,50,55 10-11 * * *" # 10:00-11:55 (24 runs)
+    - cron: "0,5,10,15,20,25,30 12 * * *" # 12:00-12:30 (7 runs)
   workflow_dispatch: # Manual trigger
 
 jobs:
@@ -19,13 +20,16 @@ jobs:
           response=$(curl -s "${{ secrets.VERCEL_URL }}/api/check-rhys")
           echo "Response: $response"
 
-          # Check if the response contains success: true
           if echo "$response" | grep -q '"success":true'; then
             echo "✅ Monitor check completed successfully"
             
-            # Check for new posts
             if echo "$response" | grep -q '"newPosts":[1-9]'; then
               echo "🎉 New Rhys Williams posts found!"
+              
+              # Extract email status
+              if echo "$response" | grep -q '"emailSent":true'; then
+                echo "📧 Email notification sent!"
+              fi
             else
               echo "📭 No new posts found"
             fi
