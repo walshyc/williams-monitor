@@ -64,6 +64,7 @@ async function extractTipsFromUrl(url: string): Promise<BettingTip[]> {
         const response = await fetch(url, {
             headers: {
                 "User-Agent": USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             },
         });
 
@@ -80,42 +81,92 @@ async function extractTipsFromUrl(url: string): Promise<BettingTip[]> {
 
         if (!recommendedBetsDiv) {
             console.log("❌ No recommended_bets div found");
+            console.log("🔍 Available divs with IDs:",
+                Array.from(document.querySelectorAll('div[id]'))
+                    .map(div => div.id)
+                    .slice(0, 10) // Show first 10 IDs for debugging
+            );
             return [];
         }
 
-        const betsContent = recommendedBetsDiv.textContent || "";
-        console.log(`📝 Extracted betting content: ${betsContent.substring(0, 200)}...`);
+        // Get the HTML content instead of just text content
+        const betsHTML = recommendedBetsDiv.innerHTML;
+        console.log(`📝 Extracted betting HTML: ${betsHTML.substring(0, 500)}...`);
 
-        // Use AI to extract structured betting tips
+        if (!betsHTML || betsHTML.trim().length === 0) {
+            console.log("❌ No content found in recommended_bets div");
+            return [];
+        }
+
+        // Use AI to extract structured betting tips from HTML
         const result = await generateObject({
             model: openai("gpt-4o-mini"),
             schema: BettingTipsSchema,
             prompt: `
-        Extract betting tips from this horse racing content. Look for:
-        - Horse names
-        - Meeting locations (race venues)
-        - Race times
-        - Suggested minimum prices/odds
-        - Points advised
-        - Bet type (win or each way/e/w)
-
-        Content: ${betsContent}
-
-        Example format from content like "Back Papa Barns in the 15:12 at Uttoxeter 1pt win @ 15/4":
-        - Horse: Papa Barns
-        - Location: Uttoxeter  
-        - Time: 15:12
-        - Price: 15/4
-        - Points: 1pt
-        - Type: win
-      `,
+          Extract betting tips from this horse racing HTML content. The content contains betting recommendations with horse names, race times, venues, odds, and stake information.
+  
+          Look for patterns like:
+          - "Back [Horse Name] in the [Time] at [Venue] [Stakes] [win/e/w] @ [Odds]"
+          - Horse names (e.g., "Papa Barns", "Wakey Wakey Man")
+          - Race times (e.g., "15:12", "16:50")
+          - Venues (e.g., "Uttoxeter", "Kilbeggan", "Cork")
+          - Stakes (e.g., "1pt", "0.5pt")
+          - Bet types ("win" or "e/w"/"each way")
+          - Odds (e.g., "15/4", "200/1", "10/1")
+  
+          HTML Content: ${betsHTML}
+  
+          Extract each betting tip as a separate object. If you see "e/w" treat it as "each way".
+        `,
         });
 
         console.log(`✅ Extracted ${result.object.tips.length} tips using AI`);
+
+        // Log extracted tips for debugging
+        result.object.tips.forEach((tip, i) => {
+            console.log(`Tip ${i + 1}: ${tip.horseName} at ${tip.meetingLocation} (${tip.time}) - ${tip.points} ${tip.betType} @ ${tip.suggestedPrice}`);
+        });
+
         return result.object.tips;
     } catch (error) {
         console.error("❌ Error extracting tips:", error);
         return [];
+    }
+}
+
+async function debugPageStructure(url: string): Promise<void> {
+    try {
+        const response = await fetch(url, {
+            headers: {
+                "User-Agent": USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            },
+        });
+
+        const html = await response.text();
+        const dom = new JSDOM(html);
+        const document = dom.window.document;
+
+        console.log("🔍 Page debugging info:");
+        console.log("- Page title:", document.title);
+        console.log("- Page has recommended_bets div:", !!document.getElementById("recommended_bets"));
+
+        const recommendedBetsDiv = document.getElementById("recommended_bets");
+        if (recommendedBetsDiv) {
+            console.log("- recommended_bets div class:", recommendedBetsDiv.className);
+            console.log("- recommended_bets div content length:", recommendedBetsDiv.innerHTML.length);
+            console.log("- recommended_bets div preview:", recommendedBetsDiv.innerHTML.substring(0, 200));
+        }
+
+        // Check for alternative selectors
+        const cardDivs = document.querySelectorAll('.card');
+        console.log("- Found .card divs:", cardDivs.length);
+
+        const bettingLinks = document.querySelectorAll('a[href*="betfair.com"]');
+        console.log("- Found betfair links:", bettingLinks.length);
+
+    } catch (error) {
+        console.error("Debug error:", error);
     }
 }
 
@@ -380,6 +431,8 @@ async function scrapeNewPosts(): Promise<Post[]> {
 
                 if (!seenPosts.includes(link)) {
                     console.log(`✨ New Rhys Williams post found: ${title}`);
+                    // Add debugging (remove this after testing)
+                    await debugPageStructure(link);
 
                     // Extract betting tips using AI
                     const tips = await extractTipsFromUrl(link);
