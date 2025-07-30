@@ -152,30 +152,31 @@ function formatEmailHTML(posts: Post[]): string {
         html += `
         <li style="margin-bottom: 15px;">
             <strong><a href="${post.link}" target="_blank">${post.title}</a></strong><br>
-            <small>📅 ${new Date(post.date).toLocaleString("en-IE", { timeZone: "Europe/Dublin" })}</small>
-        </li>
-        `;
+            <small>📅 ${post.date} </small>
+            </li>
+                `;
     });
 
     html += `
-    </ul>
-    <p>Happy betting! 🐎</p>
-    <p><small>Alert sent at: ${new Date().toLocaleString("en-IE", { timeZone: "Europe/Dublin" })}</small></p>
-    `;
+            </ul>
+            < p > Happy betting! 🐎</>
+                < p > <small>Alert sent at: ${new Date().toLocaleString("en-IE", { timeZone: "Europe/Dublin" })} </small></ >
+                    `;
 
     return html;
 }
 
 function formatSlackMessage(posts: Post[]): string {
-    let message = `🏇 *New Rhys Williams Tips* (${posts.length} post${posts.length > 1 ? "s" : ""}):\n\n`;
+    let message = `🏇 * New Rhys Williams Tips * (${posts.length} post${posts.length > 1 ? "s" : ""}): \n\n`;
 
     posts.forEach((post, i) => {
-        message += `${i + 1}. *${post.title}*\n`;
-        message += `   📅 ${post.date}\n`;
-        message += `   🔗 <${post.link}|Read More>\n\n`;
+        message += `${i + 1}. * ${post.title}*\n`;
+        message += `   📅 ${post.date} \n`;
+        message += `   🔗 <${post.link} | Read More >\n\n`;
+
     });
 
-    message += `🤖 _Alert sent at ${new Date().toLocaleString("en-IE", { timeZone: "Europe/Dublin" })}_`;
+    message += `🤖 _Alert sent at ${new Date().toLocaleString("en-IE", { timeZone: "Europe/Dublin" })} _`;
 
     return message;
 }
@@ -201,10 +202,10 @@ async function scrapeNewPosts(): Promise<Post[]> {
             },
         });
 
-        console.log(`📡 RSS Response status: ${response.status}`);
+        console.log(`📡 RSS Response status: ${response.status} `);
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            throw new Error(`HTTP error! status: ${response.status} `);
         }
 
         const xmlText = await response.text();
@@ -252,12 +253,12 @@ async function scrapeNewPosts(): Promise<Post[]> {
 
                 if (!seenPosts.includes(link)) {
                     newPosts.push(post);
-                    console.log(`✨ New Rhys Williams post found: ${post.title}`);
+                    console.log(`✨ New Rhys Williams post found: ${post.title} `);
                 } else {
-                    console.log(`👀 Already seen: ${post.title}`);
+                    console.log(`👀 Already seen: ${post.title} `);
                 }
             } catch (error) {
-                console.error(`Error parsing RSS item:`, error);
+                console.error(`Error parsing RSS item: `, error);
             }
         }
 
@@ -265,7 +266,7 @@ async function scrapeNewPosts(): Promise<Post[]> {
     } catch (error) {
         console.error("Error fetching RSS feed:", error);
         throw new Error(
-            `Failed to fetch RSS feed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            `Failed to fetch RSS feed: ${error instanceof Error ? error.message : "Unknown error"} `,
         );
     }
 }
