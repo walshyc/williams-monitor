@@ -19,9 +19,9 @@ interface ApiResponse {
     error?: string;
 }
 
-const AUTHOR_URL = 'https://betting.betfair.com/authors/rhys-williams/';
+const RSS_URL = 'https://betting.betfair.com/index.xml';
 const SEEN_POSTS_KEY = 'seen_posts';
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+const USER_AGENT = 'Mozilla/5.0 (compatible; RSS Reader; +https://your-domain.com)';
 
 async function getSeenPosts(): Promise<string[]> {
     try {
@@ -40,107 +40,97 @@ async function addSeenPosts(newPostLinks: string[]): Promise<void> {
         await kv.set(SEEN_POSTS_KEY, updatedSeenPosts);
     } catch (error) {
         console.error('Error saving seen posts:', error);
-
     }
 }
 
-// Replace the scrapeNewPosts function with this enhanced version:
+function parseRSSDate(dateString: string): string {
+    try {
+        // RSS dates are in format: "Wed, 30 Jul 2025 10:56:00 +0100"
+        const date = new Date(dateString);
+        return date.toISOString();
+    } catch (error) {
+        console.error('Error parsing date:', dateString, error);
+        return new Date().toISOString();
+    }
+}
+
 async function scrapeNewPosts(): Promise<Post[]> {
     try {
-        console.log('🔍 Fetching Rhys Williams author page...');
-        console.log(456);
+        console.log('🔍 Fetching Betfair RSS feed...');
 
-        // Add random delay to appear more human
-        const randomDelay = Math.floor(Math.random() * 3000) + 2000; // 2-5 seconds
-        console.log(`⏱️ Waiting ${randomDelay}ms before request...`);
-        await new Promise(resolve => setTimeout(resolve, randomDelay));
-
-        // More comprehensive headers to mimic a real browser
-        const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'Cache-Control': 'max-age=0',
-            'Referer': 'https://www.google.com/',
-            'Origin': 'https://betting.betfair.com'
-        };
-
-        console.log('🌐 Making request with enhanced headers...');
-
-        const response = await fetch(AUTHOR_URL, {
-            headers,
-            method: 'GET'
+        const response = await fetch(RSS_URL, {
+            headers: {
+                'User-Agent': USER_AGENT,
+                'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+            }
         });
 
-        console.log(`📡 Response status: ${response.status}`);
-        console.log(`📡 Response headers:`, Object.fromEntries(response.headers.entries()));
+        console.log(`📡 RSS Response status: ${response.status}`);
 
         if (!response.ok) {
-            // Log more details about the error
-            const responseText = await response.text();
-            console.log(`❌ Response body: ${responseText.substring(0, 500)}...`);
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const html = await response.text();
-        console.log(`📄 HTML length: ${html.length} characters`);
-        console.log(`📄 HTML preview: ${html.substring(0, 200)}...`);
+        const xmlText = await response.text();
+        console.log(`📄 RSS XML length: ${xmlText.length} characters`);
 
-        const dom = new JSDOM(html);
+        // Parse XML using JSDOM
+        const dom = new JSDOM(xmlText, { contentType: 'text/xml' });
         const document = dom.window.document;
 
-        const articles = document.querySelectorAll('.entry_summary');
+        const items = document.querySelectorAll('item');
         const newPosts: Post[] = [];
         const seenPosts = await getSeenPosts();
 
-        console.log(`Found ${articles.length} articles on page`);
+        console.log(`Found ${items.length} items in RSS feed`);
 
-        for (let i = 0; i < Math.min(articles.length, 5); i++) {
-            const article = articles[i];
-
+        for (const item of items) {
             try {
-                const titleElem = article.querySelector('h2.title a') as HTMLAnchorElement;
-                const timeElem = article.querySelector('time') as HTMLTimeElement;
+                const titleElem = item.querySelector('title');
+                const linkElem = item.querySelector('link');
+                const dateElem = item.querySelector('pubDate');
+                const categories = item.querySelectorAll('category');
 
-                if (!titleElem) continue;
+                if (!titleElem || !linkElem) continue;
 
                 const title = titleElem.textContent?.trim();
-                const link = titleElem.href;
-                const date = timeElem?.getAttribute('datetime') || 'Unknown';
+                const link = linkElem.textContent?.trim();
+                const pubDate = dateElem?.textContent?.trim() || '';
 
                 if (!title || !link) continue;
+
+                // Check if this post is by Rhys Williams
+                const isRhysPost = Array.from(categories).some(cat =>
+                    cat.textContent?.toLowerCase().includes('rhys williams')
+                ) || title.toLowerCase().includes('rhys williams');
+
+                if (!isRhysPost) {
+                    continue; // Skip posts not by Rhys Williams
+                }
 
                 const post: Post = {
                     title,
                     link,
-                    date,
+                    date: parseRSSDate(pubDate),
                     author: 'Rhys Williams'
                 };
 
                 if (!seenPosts.includes(link)) {
                     newPosts.push(post);
-                    console.log(`✨ New post found: ${post.title}`);
+                    console.log(`✨ New Rhys Williams post found: ${post.title}`);
                 } else {
                     console.log(`👀 Already seen: ${post.title}`);
                 }
             } catch (error) {
-                console.error(`Error parsing article ${i}:`, error);
+                console.error(`Error parsing RSS item:`, error);
             }
         }
 
         return newPosts;
 
     } catch (error) {
-        console.error('Error scraping page:', error);
-        throw new Error(`Failed to scrape posts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error('Error fetching RSS feed:', error);
+        throw new Error(`Failed to fetch RSS feed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
 
@@ -148,7 +138,6 @@ export default async function handler(
     req: VercelRequest,
     res: VercelResponse
 ): Promise<void> {
-    // Set CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -161,25 +150,22 @@ export default async function handler(
     const timestamp = new Date().toISOString();
 
     try {
-        console.log('🔍 Starting Rhys Williams monitor check at:', timestamp);
+        console.log('🔍 Starting Rhys Williams RSS monitor check at:', timestamp);
 
-        // Scrape for new posts
         const newPosts = await scrapeNewPosts();
 
         if (newPosts.length > 0) {
-            console.log(`🎉 Found ${newPosts.length} new posts!`);
+            console.log(`🎉 Found ${newPosts.length} new Rhys Williams posts!`);
 
-            // Log the posts
             newPosts.forEach(post => {
                 console.log(`📝 ${post.title}`);
                 console.log(`📅 ${post.date}`);
                 console.log(`🔗 ${post.link}\n`);
             });
 
-            // Update seen posts
             await addSeenPosts(newPosts.map(p => p.link));
         } else {
-            console.log('📭 No new posts found');
+            console.log('📭 No new Rhys Williams posts found');
         }
 
         const response: ApiResponse = {
@@ -187,7 +173,7 @@ export default async function handler(
             timestamp,
             newPosts: newPosts.length,
             posts: newPosts,
-            message: newPosts.length > 0 ? 'New posts found!' : 'No new posts'
+            message: newPosts.length > 0 ? `Found ${newPosts.length} new Rhys Williams posts!` : 'No new Rhys Williams posts'
         };
 
         res.status(200).json(response);
@@ -201,7 +187,7 @@ export default async function handler(
             timestamp,
             newPosts: 0,
             posts: [],
-            message: 'Error occurred while checking for posts',
+            message: 'Error occurred while checking RSS feed',
             error: errorMessage
         };
 
