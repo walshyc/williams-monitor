@@ -2,6 +2,7 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import fetch from 'node-fetch';
 import { JSDOM } from 'jsdom';
 import { kv } from '@vercel/kv';
+import nodemailer from 'nodemailer';
 
 interface Post {
     title: string;
@@ -17,6 +18,7 @@ interface ApiResponse {
     posts: Post[];
     message: string;
     error?: string;
+    emailSent?: boolean;
 }
 
 const RSS_URL = 'https://betting.betfair.com/index.xml';
@@ -43,9 +45,90 @@ async function addSeenPosts(newPostLinks: string[]): Promise<void> {
     }
 }
 
+async function sendEmailAlert(posts: Post[]): Promise<boolean> {
+    try {
+        const emailUser = process.env.EMAIL_USER;
+        const emailPass = process.env.EMAIL_PASS;
+        const emailTo = process.env.EMAIL_TO || emailUser;
+
+        if (!emailUser || !emailPass) {
+            console.log('📧 Email not configured, skipping email alert');
+            return false;
+        }
+
+        console.log('📧 Sending email alert...');
+
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: emailUser,
+                pass: emailPass
+            }
+        });
+
+        const subject = `🏇 New Rhys Williams Tips - ${posts.length} post(s)`;
+        const body = formatEmailBody(posts);
+
+        await transporter.sendMail({
+            from: emailUser,
+            to: emailTo,
+            subject,
+            text: body,
+            html: formatEmailHTML(posts)
+        });
+
+        console.log('✅ Email sent successfully');
+        return true;
+
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('❌ Email error:', errorMessage);
+        return false;
+    }
+}
+
+function formatEmailBody(posts: Post[]): string {
+    let body = `New horse racing tips from Rhys Williams (${posts.length} post(s)):\n\n`;
+
+    posts.forEach((post, i) => {
+        body += `${i + 1}. ${post.title}\n`;
+        body += `   📅 ${new Date(post.date).toLocaleString()}\n`;
+        body += `   🔗 ${post.link}\n\n`;
+    });
+
+    body += `Happy betting! 🐎\n`;
+    body += `Alert sent at: ${new Date().toLocaleString()}`;
+
+    return body;
+}
+
+function formatEmailHTML(posts: Post[]): string {
+    let html = `
+    <h2>🏇 New Rhys Williams Tips</h2>
+    <p>Found <strong>${posts.length}</strong> new post(s):</p>
+    <ul>
+    `;
+
+    posts.forEach((post, i) => {
+        html += `
+        <li style="margin-bottom: 15px;">
+            <strong><a href="${post.link}" target="_blank">${post.title}</a></strong><br>
+            <small>📅 ${new Date(post.date).toLocaleString()}</small>
+        </li>
+        `;
+    });
+
+    html += `
+    </ul>
+    <p>Happy betting! 🐎</p>
+    <p><small>Alert sent at: ${new Date().toLocaleString()}</small></p>
+    `;
+
+    return html;
+}
+
 function parseRSSDate(dateString: string): string {
     try {
-        // RSS dates are in format: "Wed, 30 Jul 2025 10:56:00 +0100"
         const date = new Date(dateString);
         return date.toISOString();
     } catch (error) {
@@ -74,7 +157,6 @@ async function scrapeNewPosts(): Promise<Post[]> {
         const xmlText = await response.text();
         console.log(`📄 RSS XML length: ${xmlText.length} characters`);
 
-        // Parse XML using JSDOM
         const dom = new JSDOM(xmlText, { contentType: 'text/xml' });
         const document = dom.window.document;
 
@@ -99,13 +181,12 @@ async function scrapeNewPosts(): Promise<Post[]> {
 
                 if (!title || !link) continue;
 
-                // Check if this post is by Rhys Williams
                 const isRhysPost = Array.from(categories).some(cat =>
                     cat.textContent?.toLowerCase().includes('rhys williams')
                 ) || title.toLowerCase().includes('rhys williams');
 
                 if (!isRhysPost) {
-                    continue; // Skip posts not by Rhys Williams
+                    continue;
                 }
 
                 const post: Post = {
@@ -153,6 +234,7 @@ export default async function handler(
         console.log('🔍 Starting Rhys Williams RSS monitor check at:', timestamp);
 
         const newPosts = await scrapeNewPosts();
+        let emailSent = false;
 
         if (newPosts.length > 0) {
             console.log(`🎉 Found ${newPosts.length} new Rhys Williams posts!`);
@@ -163,6 +245,10 @@ export default async function handler(
                 console.log(`🔗 ${post.link}\n`);
             });
 
+            // Send email alert
+            emailSent = await sendEmailAlert(newPosts);
+
+            // Update seen posts
             await addSeenPosts(newPosts.map(p => p.link));
         } else {
             console.log('📭 No new Rhys Williams posts found');
@@ -173,7 +259,8 @@ export default async function handler(
             timestamp,
             newPosts: newPosts.length,
             posts: newPosts,
-            message: newPosts.length > 0 ? `Found ${newPosts.length} new Rhys Williams posts!` : 'No new Rhys Williams posts'
+            message: newPosts.length > 0 ? `Found ${newPosts.length} new Rhys Williams posts!` : 'No new Rhys Williams posts',
+            emailSent
         };
 
         res.status(200).json(response);
@@ -188,7 +275,8 @@ export default async function handler(
             newPosts: 0,
             posts: [],
             message: 'Error occurred while checking RSS feed',
-            error: errorMessage
+            error: errorMessage,
+            emailSent: false
         };
 
         res.status(500).json(response);
