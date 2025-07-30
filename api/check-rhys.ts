@@ -56,90 +56,46 @@ const BettingTipsSchema = z.object({
     tips: z.array(BettingTipSchema),
 });
 
-async function extractTipsFromUrl(url: string): Promise<BettingTip[]> {
+
+async function extractTipsFromUrlWithAI(url: string): Promise<BettingTip[]> {
     try {
-        console.log(`🤖 Extracting tips from: ${url}`);
-
-        // Add delay to avoid being flagged as a bot
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Use more realistic browser headers
-        const response = await fetch(url, {
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate, br",
-                "DNT": "1",
-                "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Cache-Control": "max-age=0",
-            },
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to fetch blog post: ${response.status}`);
-        }
-
-        const html = await response.text();
-
-        // Check if we got a Cloudflare challenge page
-        if (html.includes("Just a moment") || html.includes("cf-browser-verification")) {
-            console.log("❌ Blocked by Cloudflare/bot protection");
-            return [];
-        }
-
-        const dom = new JSDOM(html);
-        const document = dom.window.document;
-
-        // Rest of your extraction logic...
-        const recommendedBetsDiv = document.getElementById("recommended_bets");
-
-        if (!recommendedBetsDiv) {
-            console.log("❌ No recommended_bets div found");
-            return [];
-        }
-
-        const betsHTML = recommendedBetsDiv.innerHTML;
-        console.log(`📝 Extracted betting HTML: ${betsHTML.substring(0, 500)}...`);
-
-        if (!betsHTML || betsHTML.trim().length === 0) {
-            console.log("❌ No content found in recommended_bets div");
-            return [];
-        }
+        console.log(`🤖 Having AI directly read URL: ${url}`);
 
         const result = await generateObject({
-            model: openai("gpt-4o-mini"),
+            model: openai("gpt-4o-mini"), // or try "gpt-4o" if you have access
             schema: BettingTipsSchema,
             prompt: `
-          Extract betting tips from this horse racing HTML content. The content contains betting recommendations with horse names, race times, venues, odds, and stake information.
+          Please visit this horse racing blog post URL and extract the betting tips from the "recommended_bets" section: ${url}
   
-          Look for patterns like:
+          Look for betting recommendations that follow patterns like:
           - "Back [Horse Name] in the [Time] at [Venue] [Stakes] [win/e/w] @ [Odds]"
-          - Horse names (e.g., "Papa Barns", "Wakey Wakey Man")
-          - Race times (e.g., "15:12", "16:50")
-          - Venues (e.g., "Uttoxeter", "Kilbeggan", "Cork")
-          - Stakes (e.g., "1pt", "0.5pt")
-          - Bet types ("win" or "e/w"/"each way")
-          - Odds (e.g., "15/4", "200/1", "10/1")
+          
+          Extract the following information for each tip:
+          - Horse name (e.g., "Papa Barns", "Wakey Wakey Man")
+          - Meeting location/venue (e.g., "Uttoxeter", "Kilbeggan", "Cork")
+          - Race time (e.g., "15:12", "16:50")
+          - Suggested minimum price/odds (e.g., "15/4", "200/1", "10/1")
+          - Points advised (e.g., "1pt", "0.5pt")
+          - Bet type: "win" for win bets, "each way" for e/w bets
   
-          HTML Content: ${betsHTML}
-  
-          Extract each betting tip as a separate object. If you see "e/w" treat it as "each way".
+          If you cannot access the URL or find no betting tips, return an empty array.
         `,
         });
 
-        console.log(`✅ Extracted ${result.object.tips.length} tips using AI`);
-        return result.object.tips;
+        console.log(`✅ AI extracted ${result.object.tips.length} tips directly from URL`);
 
+        // Log extracted tips for debugging
+        result.object.tips.forEach((tip, i) => {
+            console.log(`Tip ${i + 1}: ${tip.horseName} at ${tip.meetingLocation} (${tip.time}) - ${tip.points} ${tip.betType} @ ${tip.suggestedPrice}`);
+        });
+
+        return result.object.tips;
     } catch (error) {
-        console.error("❌ Error extracting tips:", error);
+        console.error("❌ Error with AI URL reading:", error);
         return [];
     }
 }
+
 async function debugPageStructure(url: string): Promise<void> {
     try {
         const response = await fetch(url, {
@@ -441,7 +397,7 @@ async function scrapeNewPosts(): Promise<Post[]> {
                     await debugPageStructure(link);
 
                     // Extract betting tips using AI
-                    const tips = await extractTipsFromUrl(link);
+                    const tips = await extractTipsFromUrlWithAI(link);
 
                     const post: Post = {
                         title,
