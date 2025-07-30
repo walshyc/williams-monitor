@@ -19,6 +19,7 @@ interface ApiResponse {
     message: string;
     error?: string;
     emailSent?: boolean;
+    slackSent?: boolean;
 }
 
 const RSS_URL = 'https://betting.betfair.com/index.xml';
@@ -87,6 +88,45 @@ async function sendEmailAlert(posts: Post[]): Promise<boolean> {
     }
 }
 
+async function sendSlackAlert(posts: Post[]): Promise<boolean> {
+    try {
+        const webhookUrl = process.env.SLACK_WEBHOOK;
+
+        if (!webhookUrl) {
+            console.log('💬 Slack not configured, skipping Slack alert');
+            return false;
+        }
+
+        console.log('💬 Sending Slack alert...');
+
+        const message = formatSlackMessage(posts);
+
+        const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text: message,
+                username: 'Rhys Williams Monitor',
+                icon_emoji: ':horse_racing:'
+            })
+        });
+
+        if (response.ok) {
+            console.log('✅ Slack alert sent successfully');
+            return true;
+        } else {
+            const errorText = await response.text();
+            console.error('❌ Slack response error:', response.status, errorText);
+            return false;
+        }
+
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('❌ Slack error:', errorMessage);
+        return false;
+    }
+}
+
 function formatEmailBody(posts: Post[]): string {
     let body = `New horse racing tips from Rhys Williams (${posts.length} post(s)):\n\n`;
 
@@ -125,6 +165,20 @@ function formatEmailHTML(posts: Post[]): string {
     `;
 
     return html;
+}
+
+function formatSlackMessage(posts: Post[]): string {
+    let message = `🏇 *New Rhys Williams Tips* (${posts.length} post${posts.length > 1 ? 's' : ''}):\n\n`;
+
+    posts.forEach((post, i) => {
+        message += `${i + 1}. *${post.title}*\n`;
+        message += `   📅 ${new Date(post.date).toLocaleString()}\n`;
+        message += `   🔗 <${post.link}|Read More>\n\n`;
+    });
+
+    message += `🤖 _Alert sent at ${new Date().toLocaleString()}_`;
+
+    return message;
 }
 
 function parseRSSDate(dateString: string): string {
@@ -235,6 +289,7 @@ export default async function handler(
 
         const newPosts = await scrapeNewPosts();
         let emailSent = false;
+        let slackSent = false;
 
         if (newPosts.length > 0) {
             console.log(`🎉 Found ${newPosts.length} new Rhys Williams posts!`);
@@ -245,8 +300,14 @@ export default async function handler(
                 console.log(`🔗 ${post.link}\n`);
             });
 
-            // Send email alert
-            emailSent = await sendEmailAlert(newPosts);
+            // Send alerts
+            const [emailResult, slackResult] = await Promise.all([
+                sendEmailAlert(newPosts),
+                sendSlackAlert(newPosts)
+            ]);
+
+            emailSent = emailResult;
+            slackSent = slackResult;
 
             // Update seen posts
             await addSeenPosts(newPosts.map(p => p.link));
@@ -260,7 +321,8 @@ export default async function handler(
             newPosts: newPosts.length,
             posts: newPosts,
             message: newPosts.length > 0 ? `Found ${newPosts.length} new Rhys Williams posts!` : 'No new Rhys Williams posts',
-            emailSent
+            emailSent,
+            slackSent
         };
 
         res.status(200).json(response);
@@ -276,7 +338,8 @@ export default async function handler(
             posts: [],
             message: 'Error occurred while checking RSS feed',
             error: errorMessage,
-            emailSent: false
+            emailSent: false,
+            slackSent: false
         };
 
         res.status(500).json(response);
