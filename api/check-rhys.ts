@@ -132,7 +132,7 @@ function formatEmailBody(posts: Post[]): string {
 
     posts.forEach((post, i) => {
         body += `${i + 1}. ${post.title}\n`;
-        body += `   📅 ${new Date(post.date).toLocaleString()}\n`;
+        body += `   📅 ${new Date(post.date).toLocaleString('en-IE', { timeZone: 'Europe/Dublin' })}\n`;
         body += `   🔗 ${post.link}\n\n`;
     });
 
@@ -153,7 +153,7 @@ function formatEmailHTML(posts: Post[]): string {
         html += `
         <li style="margin-bottom: 15px;">
             <strong><a href="${post.link}" target="_blank">${post.title}</a></strong><br>
-            <small>📅 ${new Date(post.date).toLocaleString()}</small>
+            <small>📅 ${new Date(post.date).toLocaleString('en-IE', { timeZone: 'Europe/Dublin' })}</small>
         </li>
         `;
     });
@@ -172,7 +172,7 @@ function formatSlackMessage(posts: Post[]): string {
 
     posts.forEach((post, i) => {
         message += `${i + 1}. *${post.title}*\n`;
-        message += `   📅 ${new Date(post.date).toLocaleString()}\n`;
+        message += `   📅 ${new Date(post.date).toLocaleString('en-IE', { timeZone: 'Europe/Dublin' })}\n`;
         message += `   🔗 <${post.link}|Read More>\n\n`;
     });
 
