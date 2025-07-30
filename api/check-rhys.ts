@@ -3,12 +3,25 @@ import fetch from "node-fetch";
 import { JSDOM } from "jsdom";
 import { kv } from "@vercel/kv";
 import nodemailer from "nodemailer";
+import { openai } from "@ai-sdk/openai";
+import { generateObject } from "ai";
+import { z } from "zod";
 
 interface Post {
     title: string;
     link: string;
     date: string;
     author: string;
+    tips?: BettingTip[];
+}
+
+interface BettingTip {
+    horseName: string;
+    meetingLocation: string;
+    time: string;
+    suggestedPrice: string;
+    points: string;
+    betType: "win" | "e/w" | "each way";
 }
 
 interface ApiResponse {
@@ -26,6 +39,85 @@ const RSS_URL = "https://betting.betfair.com/index.xml";
 const SEEN_POSTS_KEY = "seen_posts";
 const USER_AGENT =
     "Mozilla/5.0 (compatible; RSS Reader; +https://your-domain.com)";
+
+// Zod schema for betting tips extraction
+const BettingTipSchema = z.object({
+    horseName: z.string().describe("The name of the horse"),
+    meetingLocation: z.string().describe("The racing venue/location"),
+    time: z.string().describe("The race time"),
+    suggestedPrice: z.string().describe("The minimum odds/price suggested"),
+    points: z.string().describe("The points advised (e.g., 1pt, 0.5pt)"),
+    betType: z
+        .enum(["win", "e/w", "each way"])
+        .describe("Type of bet - win or each way"),
+});
+
+const BettingTipsSchema = z.object({
+    tips: z.array(BettingTipSchema),
+});
+
+async function extractTipsFromUrl(url: string): Promise<BettingTip[]> {
+    try {
+        console.log(`🤖 Extracting tips from: ${url}`);
+
+        // Fetch the blog post content
+        const response = await fetch(url, {
+            headers: {
+                "User-Agent": USER_AGENT,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch blog post: ${response.status}`);
+        }
+
+        const html = await response.text();
+        const dom = new JSDOM(html);
+        const document = dom.window.document;
+
+        // Extract the recommended bets section
+        const recommendedBetsDiv = document.getElementById("recommended_bets");
+
+        if (!recommendedBetsDiv) {
+            console.log("❌ No recommended_bets div found");
+            return [];
+        }
+
+        const betsContent = recommendedBetsDiv.textContent || "";
+        console.log(`📝 Extracted betting content: ${betsContent.substring(0, 200)}...`);
+
+        // Use AI to extract structured betting tips
+        const result = await generateObject({
+            model: openai("gpt-4o-mini"),
+            schema: BettingTipsSchema,
+            prompt: `
+        Extract betting tips from this horse racing content. Look for:
+        - Horse names
+        - Meeting locations (race venues)
+        - Race times
+        - Suggested minimum prices/odds
+        - Points advised
+        - Bet type (win or each way/e/w)
+
+        Content: ${betsContent}
+
+        Example format from content like "Back Papa Barns in the 15:12 at Uttoxeter 1pt win @ 15/4":
+        - Horse: Papa Barns
+        - Location: Uttoxeter  
+        - Time: 15:12
+        - Price: 15/4
+        - Points: 1pt
+        - Type: win
+      `,
+        });
+
+        console.log(`✅ Extracted ${result.object.tips.length} tips using AI`);
+        return result.object.tips;
+    } catch (error) {
+        console.error("❌ Error extracting tips:", error);
+        return [];
+    }
+}
 
 async function getSeenPosts(): Promise<string[]> {
     try {
@@ -82,7 +174,8 @@ async function sendEmailAlert(posts: Post[]): Promise<boolean> {
         console.log("✅ Email sent successfully");
         return true;
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
         console.error("❌ Email error:", errorMessage);
         return false;
     }
@@ -120,10 +213,49 @@ async function sendSlackAlert(posts: Post[]): Promise<boolean> {
             return false;
         }
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
         console.error("❌ Slack error:", errorMessage);
         return false;
     }
+}
+
+function formatTipsText(tips: BettingTip[]): string {
+    if (!tips || tips.length === 0) return "";
+
+    let tipsText = "\n\n🎯 BETTING TIPS:\n";
+    tips.forEach((tip, i) => {
+        tipsText += `${i + 1}. ${tip.horseName} - ${tip.time} at ${tip.meetingLocation}\n`;
+        tipsText += `   💰 ${tip.points} ${tip.betType} @ ${tip.suggestedPrice}\n`;
+    });
+    return tipsText;
+}
+
+function formatTipsHTML(tips: BettingTip[]): string {
+    if (!tips || tips.length === 0) return "";
+
+    let tipsHTML = "<h3>🎯 Betting Tips:</h3><ul>";
+    tips.forEach((tip) => {
+        tipsHTML += `
+      <li style="margin-bottom: 10px;">
+        <strong>${tip.horseName}</strong> - ${tip.time} at ${tip.meetingLocation}<br>
+        <span style="color: #2e7d32;">💰 ${tip.points} ${tip.betType} @ ${tip.suggestedPrice}</span>
+      </li>
+    `;
+    });
+    tipsHTML += "</ul>";
+    return tipsHTML;
+}
+
+function formatTipsSlack(tips: BettingTip[]): string {
+    if (!tips || tips.length === 0) return "";
+
+    let tipsText = "\n\n🎯 *BETTING TIPS:*\n";
+    tips.forEach((tip, i) => {
+        tipsText += `${i + 1}. *${tip.horseName}* - ${tip.time} at ${tip.meetingLocation}\n`;
+        tipsText += `   💰 ${tip.points} ${tip.betType} @ *${tip.suggestedPrice}*\n`;
+    });
+    return tipsText;
 }
 
 function formatEmailBody(posts: Post[]): string {
@@ -132,7 +264,9 @@ function formatEmailBody(posts: Post[]): string {
     posts.forEach((post, i) => {
         body += `${i + 1}. ${post.title}\n`;
         body += `   📅 ${new Date(post.date).toLocaleString("en-IE", { timeZone: "Europe/Dublin" })}\n`;
-        body += `   🔗 ${post.link}\n\n`;
+        body += `   🔗 ${post.link}`;
+        body += formatTipsText(post.tips || []);
+        body += "\n\n";
     });
 
     body += `Happy betting! 🐎\n`;
@@ -145,38 +279,38 @@ function formatEmailHTML(posts: Post[]): string {
     let html = `
     <h2>🏇 New Rhys Williams Tips</h2>
     <p>Found <strong>${posts.length}</strong> new post(s):</p>
-    <ul>
-    `;
+  `;
 
     posts.forEach((post, i) => {
         html += `
-        <li style="margin-bottom: 15px;">
-            <strong><a href="${post.link}" target="_blank">${post.title}</a></strong><br>
-            <small>📅 ${post.date} </small>
-            </li>
-                `;
+      <div style="margin-bottom: 25px; padding: 15px; border-left: 4px solid #2e7d32;">
+        <h3><a href="${post.link}" target="_blank">${post.title}</a></h3>
+        <small>📅 ${post.date}</small>
+        ${formatTipsHTML(post.tips || [])}
+      </div>
+    `;
     });
 
     html += `
-            </ul>
-            < p > Happy betting! 🐎</>
-                < p > <small>Alert sent at: ${new Date().toLocaleString("en-IE", { timeZone: "Europe/Dublin" })} </small></ >
-                    `;
+    <p>Happy betting! 🐎</p>
+    <p><small>Alert sent at: ${new Date().toLocaleString("en-IE", { timeZone: "Europe/Dublin" })}</small></p>
+  `;
 
     return html;
 }
 
 function formatSlackMessage(posts: Post[]): string {
-    let message = `🏇 * New Rhys Williams Tips * (${posts.length} post${posts.length > 1 ? "s" : ""}): \n\n`;
+    let message = `🏇 *New Rhys Williams Tips* (${posts.length} post${posts.length > 1 ? "s" : ""}): \n\n`;
 
     posts.forEach((post, i) => {
-        message += `${i + 1}. * ${post.title}*\n`;
-        message += `   📅 ${post.date} \n`;
-        message += `   🔗 <${post.link} | Read More >\n\n`;
-
+        message += `${i + 1}. *${post.title}*\n`;
+        message += `   📅 ${post.date}\n`;
+        message += `   🔗 <${post.link}|Read More>`;
+        message += formatTipsSlack(post.tips || []);
+        message += "\n\n";
     });
 
-    message += `🤖 _Alert sent at ${new Date().toLocaleString("en-IE", { timeZone: "Europe/Dublin" })} _`;
+    message += `🤖 _Alert sent at ${new Date().toLocaleString("en-IE", { timeZone: "Europe/Dublin" })}_`;
 
     return message;
 }
@@ -202,10 +336,10 @@ async function scrapeNewPosts(): Promise<Post[]> {
             },
         });
 
-        console.log(`📡 RSS Response status: ${response.status} `);
+        console.log(`📡 RSS Response status: ${response.status}`);
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status} `);
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const xmlText = await response.text();
@@ -237,28 +371,33 @@ async function scrapeNewPosts(): Promise<Post[]> {
 
                 const isRhysPost =
                     Array.from(categories).some((cat) =>
-                        cat.textContent?.toLowerCase().includes("rhys williams"),
+                        cat.textContent?.toLowerCase().includes("rhys williams")
                     ) || title.toLowerCase().includes("rhys williams");
 
                 if (!isRhysPost) {
                     continue;
                 }
 
-                const post: Post = {
-                    title,
-                    link,
-                    date: parseRSSDate(pubDate),
-                    author: "Rhys Williams",
-                };
-
                 if (!seenPosts.includes(link)) {
+                    console.log(`✨ New Rhys Williams post found: ${title}`);
+
+                    // Extract betting tips using AI
+                    const tips = await extractTipsFromUrl(link);
+
+                    const post: Post = {
+                        title,
+                        link,
+                        date: parseRSSDate(pubDate),
+                        author: "Rhys Williams",
+                        tips,
+                    };
+
                     newPosts.push(post);
-                    console.log(`✨ New Rhys Williams post found: ${post.title} `);
                 } else {
-                    console.log(`👀 Already seen: ${post.title} `);
+                    console.log(`👀 Already seen: ${title}`);
                 }
             } catch (error) {
-                console.error(`Error parsing RSS item: `, error);
+                console.error(`Error parsing RSS item:`, error);
             }
         }
 
@@ -266,14 +405,14 @@ async function scrapeNewPosts(): Promise<Post[]> {
     } catch (error) {
         console.error("Error fetching RSS feed:", error);
         throw new Error(
-            `Failed to fetch RSS feed: ${error instanceof Error ? error.message : "Unknown error"} `,
+            `Failed to fetch RSS feed: ${error instanceof Error ? error.message : "Unknown error"}`
         );
     }
 }
 
 export default async function handler(
     req: VercelRequest,
-    res: VercelResponse,
+    res: VercelResponse
 ): Promise<void> {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -288,14 +427,13 @@ export default async function handler(
         timeZone: "Europe/Dublin",
     });
 
-    // Check if the request path is for a known static asset like favicon
     const path = req.url
         ? new URL(req.url, `http://${req.headers.host}`).pathname
         : "";
 
     if (path === "/favicon.ico" || path === "/favicon.png") {
         console.log(`ℹ️ Ignoring request for static asset: ${path}`);
-        res.status(204).end(); // 204 No Content, indicates success but no response body
+        res.status(204).end();
         return;
     }
 
@@ -312,10 +450,13 @@ export default async function handler(
             newPosts.forEach((post) => {
                 console.log(`📝 ${post.title}`);
                 console.log(`📅 ${post.date}`);
-                console.log(`🔗 ${post.link}\n`);
+                console.log(`🔗 ${post.link}`);
+                if (post.tips && post.tips.length > 0) {
+                    console.log(`🎯 ${post.tips.length} betting tips extracted`);
+                }
+                console.log("");
             });
 
-            // Send alerts
             const [emailResult, slackResult] = await Promise.all([
                 sendEmailAlert(newPosts),
                 sendSlackAlert(newPosts),
@@ -324,7 +465,6 @@ export default async function handler(
             emailSent = emailResult;
             slackSent = slackResult;
 
-            // Update seen posts
             await addSeenPosts(newPosts.map((p) => p.link));
         } else {
             console.log("📭 No new Rhys Williams posts found");
@@ -345,7 +485,8 @@ export default async function handler(
 
         res.status(200).json(response);
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
         console.error("❌ Error:", errorMessage);
 
         const response: ApiResponse = {
